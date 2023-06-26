@@ -1,10 +1,28 @@
-import React from 'react';
-import { Text, View } from 'react-native';
+import React, {useCallback} from 'react';
+import {
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {useSelector} from 'react-redux';
+import {RootState} from '../store/reducer';
+import {Order} from '../slices/order';
+import EachOrder from '../components/EachOrder';
 function Orders() {
-    return (
-       <View>
-        <Text>주문</Text>
-       </View>
-    );
+  const orders = useSelector((state: RootState) => state.order.orders);
+  const renderItem = useCallback(({item}: {item: Order}) => {
+    return <EachOrder item={item}></EachOrder>;
+  }, []);
+  return (
+    //스크롤 뷰는 화면에 안보이는 부분까지 렌더링을 해버린다
+    <FlatList
+      data={orders}
+      keyExtractor={item => item.orderId}
+      renderItem={renderItem}></FlatList>
+  );
 }
+
 export default Orders;

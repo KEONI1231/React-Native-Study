@@ -1,113 +1,175 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { Pressable, Text, TextInput, View,Alert, StyleSheet } from 'react-native';
-function SignIn() {
-    const [email, setEmail] = useState<string>('');
-    const [password, setPassword] = useState<string>('');
-    const onSubmit = useCallback(()=>{
-        if(!email || !email.trim()) {
-            return Alert.alert('알림', '이메일을 입력해주세요')
-        }
-        if(!password || !password.trim()) {
-            return Alert.alert('알림', '비밀번호를 입력해주세요')
-        }
+import React, {useCallback, useRef, useState} from 'react';
+import {
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  ActivityIndicator,
+} from 'react-native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import EncryptedStorage from 'react-native-encrypted-storage';
+import axios, {AxiosError} from 'axios';
+import {RootStackParamList} from '../../AppInner';
+import {useAppDispatch} from '../store';
+import userSlice from '../slices/user';
 
-        Alert.alert('알림', '로그인 되었습니다.');
-    }, [email, password]);
-    const onChagePassword = useCallback((text:string) => {
-        setPassword(text);
-    }, []);
-    const onChangeEmail = useCallback((text:string) => {
-        setEmail(text);
-    }, []);
-    const emailRef = useRef<TextInput | null>(null);
-    const passwordRef = useRef<TextInput | null>(null);
-    const canGoNext = email && password;
-    
-    return (
-        <View>
-            <View style = {styles.inputWrapper}>
-                <Text style = {styles.label}>이메일</Text>
-                <TextInput 
-                    style = {styles.textInput}
-                    placeholder='이메일을 입력하세요!!'
-                    value = {email}
-                    onChangeText={onChangeEmail}
-                    importantForAutofill='yes'
-                    autoComplete='email'
-                    textContentType='emailAddress' 
-                    returnKeyType='next' 
-                    onSubmitEditing={()=> {
-                        passwordRef.current?.focus; //제출 누르면 패스워드로 포커싱
-                    }}
-                    keyboardType='email-address'
-                    ref = {emailRef}
-                    blurOnSubmit = {false} //키보드 내려가는거 막기
-                    clearButtonMode='while-editing'
-                    ></TextInput> 
-            </View>
-            <View style = {styles.inputWrapper}>
-                <Text style = {styles.label}>비밀번호</Text>
-                <TextInput 
-                    style = {styles.textInput}
-                    placeholder='비밀번호를 입력하세요!!'
-                    onChangeText={onChagePassword}
-                    secureTextEntry
-                    value={password}
-                    importantForAutofill='yes'
-                    autoComplete='password'
-                    textContentType='password'
-                    returnKeyType='next'
-                    ref = {passwordRef}
-                    onSubmitEditing={onSubmit}
-                    ></TextInput>
-            </View>
-            <View style ={styles.buttonZone}>
-                <Pressable 
-                    onPress = {onSubmit} 
-                    style = {
-                        !canGoNext
-                        ? styles.loginButton
-                        : StyleSheet.compose(styles.loginButton, styles.loginButtonActive)} 
-                    
-                    disabled= {!canGoNext}>
-                    <Text style = {styles.loginButtonTextInput}>로그인</Text>
-                </Pressable>
-                <Pressable>
-                    <Text>회원가입</Text>
-                </Pressable>
-            </View>
-        </View>
-    )
-}
-const styles = StyleSheet.create({
-    inputWrapper :{
-        padding : 20,
-    },
-    textInput:{
-        padding : 5,
-        borderBottomWidth : StyleSheet.hairlineWidth,
-    },
-    label : {
-        fontWeight : 'bold',
-        fontSize : 16,
-        marginBottom : 20,
-    },
-    loginButton: {
-        backgroundColor : 'gray',
-        paddingHorizontal : 20,
-        paddingVertical : 10,
-        borderRadius : 5,
-        marginBottom : 10
-    },
-    loginButtonTextInput : {
-        color : 'white',
-        fontSize : 16
-    },
-    loginButtonActive : {
-      backgroundColor : 'blue'  
-    },
-    buttonZone: {
-        alignItems:'center',
+type SignInScreenProps = NativeStackScreenProps<RootStackParamList, 'SignIn'>;
+
+function SignIn({navigation}: SignInScreenProps) {
+  const dispatch = useAppDispatch();
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const emailRef = useRef<TextInput | null>(null);
+  const passwordRef = useRef<TextInput | null>(null);
+
+  const onChangeEmail = useCallback((text: string) => {
+    setEmail(text.trim());
+  }, []);
+  const onChangePassword = useCallback((text: string) => {
+    setPassword(text.trim());
+  }, []);
+  const onSubmit = useCallback(async () => {
+    if (loading) {
+      return;
     }
-})
+    if (!email || !email.trim()) {
+      return Alert.alert('알림', '이메일을 입력해주세요.');
+    }
+    if (!password || !password.trim()) {
+      return Alert.alert('알림', '비밀번호를 입력해주세요.');
+    }
+    try {
+      setLoading(true);
+      const response = await axios.post(`http://127.0.0.1:3105/login`, {
+        email,
+        password,
+      });
+      console.log(response.data);
+      Alert.alert('알림', '로그인 되었습니다.');
+      dispatch(
+        userSlice.actions.setUser({
+          name: response.data.data.name,
+          email: response.data.data.email,
+          accessToken: response.data.data.accessToken, //유효시간10분, 1시간
+        }),
+      );
+      dispatch(
+        userSlice.actions.setName({
+          name: response.data.data.name,
+        }),
+      );
+      await EncryptedStorage.setItem(
+        'refreshToken',
+        response.data.data.refreshToken, //access토큰과 refresh 토큰을 따로 저장해라.
+      ); //토큰과 같은 민감한 정보는 EncryptedStorage에 저장해라.
+    } catch (error) {
+      const errorResponse = (error as AxiosError).response;
+      if (errorResponse) {
+        Alert.alert('알림', '에러 발생');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, dispatch, email, password]);
+
+  const toSignUp = useCallback(() => {
+    navigation.navigate('SignUp');
+  }, [navigation]);
+  const canGoNext = email && password;
+  return (
+    <View>
+      <View style={styles.inputWrapper}>
+        <Text style={styles.label}>이메일</Text>
+        <TextInput
+          style={styles.textInput}
+          onChangeText={onChangeEmail}
+          placeholder="이메일을 입력해주세요"
+          placeholderTextColor="#666"
+          importantForAutofill="yes"
+          autoComplete="email"
+          textContentType="emailAddress"
+          value={email}
+          returnKeyType="next"
+          clearButtonMode="while-editing"
+          ref={emailRef}
+          onSubmitEditing={() => passwordRef.current?.focus()}
+          blurOnSubmit={false}
+        />
+      </View>
+      <View style={styles.inputWrapper}>
+        <Text style={styles.label}>비밀번호</Text>
+        <TextInput
+          style={styles.textInput}
+          placeholder="비밀번호를 입력해주세요(영문,숫자,특수문자)"
+          placeholderTextColor="#666"
+          importantForAutofill="yes"
+          onChangeText={onChangePassword}
+          value={password}
+          autoComplete="password"
+          textContentType="password"
+          secureTextEntry
+          returnKeyType="send"
+          clearButtonMode="while-editing"
+          ref={passwordRef}
+          onSubmitEditing={onSubmit}
+        />
+      </View>
+      <View style={styles.buttonZone}>
+        <Pressable
+          style={
+            canGoNext
+              ? StyleSheet.compose(styles.loginButton, styles.loginButtonActive)
+              : styles.loginButton
+          }
+          disabled={!canGoNext || loading}
+          onPress={onSubmit}>
+          {loading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={styles.loginButtonText}>로그인</Text>
+          )}
+        </Pressable>
+        <Pressable onPress={toSignUp}>
+          <Text>회원가입하기</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  textInput: {
+    padding: 5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  inputWrapper: {
+    padding: 20,
+  },
+  label: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginBottom: 20,
+  },
+  buttonZone: {
+    alignItems: 'center',
+  },
+  loginButton: {
+    backgroundColor: 'gray',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 5,
+    marginBottom: 10,
+  },
+  loginButtonActive: {
+    backgroundColor: 'blue',
+  },
+  loginButtonText: {
+    color: 'white',
+    fontSize: 16,
+  },
+});
+
 export default SignIn;
